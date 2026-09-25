@@ -33,6 +33,18 @@ ls  collectl_out | while read GZ; do cat collectl_out/${GZ} | zcat > collectl_ou
 podman run --rm -ti -v ${PWD}/collectl_out:/var/log/collectl quay.io/acancell-redhat/ocp_collectl_cpu:4.3.20-ubi9 sh
 ```
 
+### Cleanup
+
+- Remove installed respources
+```
+oc delete -k https://github.com/acancell-redhat/ocp_collectl_cpu.git
+```
+
+- Un-label the node
+```
+oc label node/$NODE collectl-
+```
+
 ### Sources:
 
 1. [Installing and executing collectl in RHOCP 4 ](https://access.redhat.com/solutions/6989124)

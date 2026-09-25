@@ -35,6 +35,7 @@ function main()
                 exit
         fi
 
+        set -x
         echo "Starting collectl process..."
         /usr/bin/collectl -D /etc/collectl.conf
         PID=$(pgrep -f '/usr/bin/perl -w /usr/bin/collectl')
