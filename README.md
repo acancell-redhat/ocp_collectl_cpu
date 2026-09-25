@@ -1,13 +1,23 @@
 # Execute `collectl` on RHOCP4
 
 ### Run
-- Label all the nodes you want to monitor (here, for example, all the nodes, except the masters) as `collectl=true`: 
+- Label the node you want to monitor
 ```
-oc get node -o name -l node-role.kubernetes.io/master!= | xargs -I {}  oc label {} collectl=true 
+NODE=XXXX
+oc label node/$NODE collectl=true
 ```
-Create the `Namespace/collectl`, `ClusterRoleBinding/collectl-privileged`, and `DaemonSet/collectl` resources:
+- Create the `Namespace/collectl`, `ClusterRoleBinding/collectl-privileged`, `ConfigMap/collectl-conf` and `DaemonSet/collectl` resources:
 ```
-oc apply -k https://github.com/gmeghnag/ocp-collectl.git
+oc apply -k https://github.com/acancell-redhat/ocp_collectl_cpu.git
+```
+
+- Check the pod has started and it is collecting data
+```
+oc project collectl
+oc wait --for=condition=Ready pod -l app=collectl --timeout=60s && \
+  COLLECT_POD=$(oc get pod -l app=collectl --no-headers -o custom-columns=NAME:.metadata.name)
+sleep 60
+oc exec $COLLECT_POD -- ls /var/log/collectl/
 ```
 
 ### Get collectl `war.gz` files locally:
@@ -20,7 +30,13 @@ ls  collectl_out | while read GZ; do cat collectl_out/${GZ} | zcat > collectl_ou
 ```
 ### Analyze the data:
 ```
-podman run --rm -ti -v ${PWD}/collectl_out:/var/log/collectl quay.io/gmeghnag/collectl:4.3.20-ubi9 sh
+podman run --rm -ti -v ${PWD}/collectl_out:/var/log/collectl quay.io/acancell-redhat/ocp_collectl_cpu:4.3.20-ubi9 sh
 ```
 
-[1] https://collectl.sourceforge.net/Matrix.html
+### Sources:
+
+1. [Installing and executing collectl in RHOCP 4 ](https://access.redhat.com/solutions/6989124)
+2. [Modify debug collectl config deployed in Openshift 4](https://access.redhat.com/solutions/7095759) 
+3. [How to use the collectl utility to troubleshoot performance issues in Red Hat Enterprise Linux](https://access.redhat.com/articles/351143)
+4. [How to analyze collectl raw log files collected from RHOCP 4?](https://access.redhat.com/articles/7118258)
+5. [Command Equivalence Matrix](https://collectl.sourceforge.net/Matrix.html)

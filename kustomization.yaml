@@ -5,3 +5,10 @@ resources:
 - Namespace.yaml
 - ClusterRoleBinding.yaml
 - DaemonSet.yaml
+
+configMapGenerator:
+  - name: collectl-conf
+    files:
+      - collectl.conf
+generatorOptions:
+  disableNameSuffixHash: true
