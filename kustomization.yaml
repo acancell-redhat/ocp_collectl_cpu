@@ -4,11 +4,5 @@ kind: Kustomization
 resources:
 - Namespace.yaml
 - ClusterRoleBinding.yaml
+- ConfigMap.yaml
 - DaemonSet.yaml
-
-configMapGenerator:
-  - name: collectl-conf
-    files:
-      - collectl.conf
-generatorOptions:
-  disableNameSuffixHash: true

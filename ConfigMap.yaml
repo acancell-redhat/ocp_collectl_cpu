@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: collectl-conf
+data:
+  collectl.conf: |
+    # ==============================================================================
+    # OPTIMIZED OPENSHIFT TELEMETRY CONFIGURATION: CPU & OVS PROFILE
+    # Location: /etc/collectl.conf
+    # Target: High-Resolution Host, Container, & OVS CPU Telemetry
+    # ==============================================================================
+
+    # ------------------------------------------------------------------------------
+    # DAEMON RUNTIME COMMANDS (Injected via Entrypoint $ARGS wrapper)
+    # ------------------------------------------------------------------------------
+    # IMPORTANT: The collectl perl binary intentionally ignores 'DaemonCommands' 
+    # on startup. In standard Linux environments, wrapper scripts (like systemd) 
+    # parse this line. Since this runs in a Kubernetes pod, our custom entrypoint 
+    # bash script greps this line, safely extracts the values, and passes them 
+    # directly to the binary as command-line arguments ($ARGS).
+    #
+    # FLAGS BREAKDOWN:
+    # -f /var/log/collectl : Directs raw binary telemetry logging to host directory
+    # -r00:00,7            : Daily rotation at 00:00 UTC, retains exactly 7 days
+    # -m                   : Embeds CPU topology, NUMA layout, and OS metadata in log headers
+    # -F60                 : Buffers logs in memory; flushes to storage every 60 seconds
+    #
+    # SUBSYSTEM DEFINITIONS (-s):
+    #   c : Per-Core CPU utilization (User, System, Nice, Idle, Wait, IRQ, SoftIRQ, Steal)
+    #   Z : Process-level CPU accounting (attaches CPU utilization to specific PIDs)
+    #   j : Hardware and Software Interrupt distribution per CPU core
+    #
+    # SAMPLING & ATTRIBUTION TUNING:
+    #   -i 1          : 1-second collection resolution
+    #   --procopts tw : Tracks threads (LWPs) and full command lines for thread distribution
+    # ------------------------------------------------------------------------------
+    DaemonCommands = -f /var/log/collectl -r00:00,7 -m -F60 -s cZj -i 1 --procopts tw
+
+    # ------------------------------------------------------------------------------
+    # KERNEL THREAD FILTERING (Natively Parsed by collectl)
+    # ------------------------------------------------------------------------------
+    # NOTE: Unlike DaemonCommands, the collectl binary natively reads these variables 
+    # directly on startup. This filters out idle or high-frequency kernel threads from 
+    # occupying the top 50 process slots, ensuring maximum visibility into CRI-O, 
+    # kubelet, and workloads.
+    # ------------------------------------------------------------------------------
+    ProcessFilter = kworker|rcu_|ksoftirqd|migration|cpuhp
+
+    # ------------------------------------------------------------------------------
+    # SYSTEM PATH FALLBACKS & DEFAULTS (Natively Parsed by collectl)
+    # ------------------------------------------------------------------------------
+    # NOTE: These fallback values are also natively parsed by the binary on startup.
+    # Be aware that explicit command-line flags injected via the wrapper (e.g., the 
+    # '-i 1' above) will safely override the default 'Interval' specified below.
+    # ------------------------------------------------------------------------------
+    PQuery = /usr/sbin/perfquery:/usr/bin/perfquery:/usr/local/ofed/bin/perfquery
+    Interval = 10
