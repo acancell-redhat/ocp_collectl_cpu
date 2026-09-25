@@ -1,4 +1,4 @@
-# Execute `collectl` on RHOCP4
+# Execute `collectl` on RHOCP4 for CPU analysis
 
 ### Run
 - Label the node you want to monitor
