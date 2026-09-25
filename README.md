@@ -32,7 +32,7 @@ ls  collectl_out | while read GZ; do cat collectl_out/${GZ} | zcat > collectl_ou
 
 ### Analyze the data:
 ```
-podman run --rm -ti -v ${PWD}/collectl_out:/var/log/collectl quay.io/acancell-redhat/ocp_collectl_cpu:4.3.20-ubi9 sh
+podman run --rm -ti -v ${PWD}/collectl_out:/var/log/collectl:z quay.io/acancell-redhat/ocp_collectl_cpu:4.3.20-ubi9 sh
 ```
 
 ### Cleanup
