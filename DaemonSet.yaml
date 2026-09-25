@@ -35,12 +35,6 @@ spec:
           runAsUser: 0
           privileged: true
         volumeMounts:
-        - mountPath: /proc
-          name: host-proc
-          readOnly: true
-        - mountPath: /sys
-          name: host-sys
-          readOnly: true
         - mountPath: /dev/mem
           name: dev-mem
         - mountPath: /var/log/collectl
@@ -49,14 +43,6 @@ spec:
           subPath: collectl.conf
           name: collectl-config
       volumes:
-      - name: host-proc
-        hostPath:
-          path: /proc
-          type: Directory
-      - name: host-sys
-        hostPath:
-          path: /sys
-          type: Directory
       - name: dev-mem
         hostPath:
           path: /dev/mem
