@@ -16,18 +16,20 @@ oc apply -k https://github.com/acancell-redhat/ocp_collectl_cpu.git
 oc project collectl
 oc wait --for=condition=Ready pod -l app=collectl --timeout=60s && \
   COLLECT_POD=$(oc get pod -l app=collectl --no-headers -o custom-columns=NAME:.metadata.name)
-sleep 60
+echo "Waiting 30s for initial data to be collected..." && sleep 30
 oc exec $COLLECT_POD -- ls /var/log/collectl/
 ```
 
 ### Get collectl `war.gz` files locally:
+- Download files
 ```
 mkdir -p collectl_out; oc get node -l collectl=true -o name -o json | jq '.items[].metadata.name' -r | while read NODE; do oc debug node/${NODE} -q --to-namespace=openshift-etcd -- chroot host sh -c 'cd /var/log/collectl; ls *.raw.gz' | while read FILE; do oc debug node/${NODE} -q --to-namespace=openshift-etcd -- chroot host sh -c "cd /var/log/collectl; cat $FILE" > collectl_out/${FILE}; done ; done
 ```
-#### Extract the `.raw` files:
+- Extract the `.raw` files:
 ```
 ls  collectl_out | while read GZ; do cat collectl_out/${GZ} | zcat > collectl_out/$(printf $GZ | egrep -o ".*.raw"); done
 ```
+
 ### Analyze the data:
 ```
 podman run --rm -ti -v ${PWD}/collectl_out:/var/log/collectl quay.io/acancell-redhat/ocp_collectl_cpu:4.3.20-ubi9 sh
