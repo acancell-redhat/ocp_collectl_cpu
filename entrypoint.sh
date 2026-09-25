@@ -48,8 +48,9 @@ else
     log_info "Log Directory  : Path ${LOG_DIR} successfully initialized."
 fi
 
-# Configuration File Inspection
+# Configuration File Inspection & Args Extraction
 CONF_FILE="/etc/collectl.conf"
+ARGS=""
 if [ -f "${CONF_FILE}" ]; then
     log_info "Configuration  : Found ${CONF_FILE}. Dumping active directives:"
     echo "--------------------------------------------------------------------------"
@@ -57,6 +58,14 @@ if [ -f "${CONF_FILE}" ]; then
         log_debug "  ${line}"
     done
     echo "--------------------------------------------------------------------------"
+    
+    # Extract the DaemonCommands value (ignoring spaces around the '=')
+    ARGS=$(grep -E '^DaemonCommands[[:space:]]*=' "${CONF_FILE}" | sed 's/^[^=]*=[[:space:]]*//')
+    if [ -n "${ARGS}" ]; then
+        log_info "Daemon ARGS    : Extracted arguments: ${ARGS}"
+    else
+        log_warn "Daemon ARGS    : No DaemonCommands found in ${CONF_FILE}"
+    fi
 else
     log_warn "Configuration  : ${CONF_FILE} not detected! Falling back to built-in binary defaults."
 fi
@@ -86,8 +95,15 @@ term_handler() {
 trap 'term_handler' SIGTERM SIGINT SIGHUP
 
 # --- Launch Execution ---
-log_info "Launching collectl daemon in foreground mode (--nodaemon)..."
-/usr/bin/collectl --nodaemon &
+if [ -n "${ARGS}" ]; then
+    log_info "Launching collectl daemon in foreground mode with extracted arguments..."
+    # ARGS intentionally unquoted so bash performs word splitting for the arguments
+    /usr/bin/collectl --nodaemon ${ARGS} &
+else
+    log_info "Launching collectl daemon in foreground mode with default arguments..."
+    /usr/bin/collectl --nodaemon &
+fi
+
 COLLECTL_PID=$!
 
 log_info "Daemon Status  : collectl running in background subshell with PID ${COLLECTL_PID}."
