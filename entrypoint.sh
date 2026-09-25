@@ -23,9 +23,6 @@ log_info "Validating runtime mounts and filesystem isolation..."
 if [ -d "/proc/1" ]; then
     INIT_COMM=$(cat /proc/1/comm 2>/dev/null || echo "unknown")
     log_info "ProcFS Mount   : /proc is mounted (Host PID 1 executable: '${INIT_COMM}')"
-    if [ "${INIT_COMM}" != "systemd" ] && [ "${INIT_COMM}" != "init" ]; then
-        log_warn "ProcFS Warning : PID 1 is '${INIT_COMM}'. If this is not host systemd/init, verify hostPID: true and /proc volumeMount configurations."
-    fi
 else
     log_error "ProcFS Error   : /proc directory is not accessible!"
 fi
@@ -34,35 +31,29 @@ fi
 if [ -d "/sys/devices" ]; then
     log_info "SysFS Mount    : /sys is accessible."
 else
-    log_warn "SysFS Warning  : /sys/devices not found. Some per-core CPU or interrupt metrics may be degraded."
+    log_warn "SysFS Warning  : /sys/devices not found."
 fi
 
 # Target Log Directory Diagnostics
 LOG_DIR="/var/log/collectl"
 log_info "Checking target telemetry output path: ${LOG_DIR}"
-if [ -d "${LOG_DIR}" ]; then
-    log_info "Log Directory  : ${LOG_DIR} exists."
-else
+if [ ! -d "${LOG_DIR}" ]; then
     log_warn "Log Directory  : ${LOG_DIR} missing. Creating directory structure..."
     mkdir -p "${LOG_DIR}"
-    log_info "Log Directory  : Path ${LOG_DIR} successfully initialized."
 fi
 
 # Configuration File Inspection & Args Extraction
 CONF_FILE="/etc/collectl.conf"
 ARGS=""
 if [ -f "${CONF_FILE}" ]; then
-    log_info "Configuration  : Found ${CONF_FILE}. Dumping active directives:"
-    echo "--------------------------------------------------------------------------"
-    grep -v '^\s*#' "${CONF_FILE}" | grep -v '^\s*$' | while read -r line; do
-        log_debug "  ${line}"
-    done
-    echo "--------------------------------------------------------------------------"
+    log_info "Configuration  : Found ${CONF_FILE}."
     
-    # Extract the DaemonCommands value (ignoring spaces around the '=')
-    ARGS=$(grep -E '^DaemonCommands[[:space:]]*=' "${CONF_FILE}" | sed 's/^[^=]*=[[:space:]]*//')
-    if [ -n "${ARGS}" ]; then
-        log_info "Daemon ARGS    : Extracted arguments: ${ARGS}"
+    # Safely extract ONLY DaemonCommands. We use sed to handle the spaces around the '=' sign.
+    # The other variables (ProcessFilter, Interval) are natively parsed by the collectl perl binary.
+    ARGS=$(grep -E '^DaemonCommands[[:space:]]*=' "${CONF_FILE}" | sed 's/^[^=]*=[[:space:]]*//' | tr -d "\"'")
+    
+    if [ -n "${ARGS// /}" ]; then
+        log_info "Daemon ARGS    : Extracted DaemonCommands: ${ARGS}"
     else
         log_warn "Daemon ARGS    : No DaemonCommands found in ${CONF_FILE}"
     fi
@@ -77,16 +68,10 @@ term_handler() {
     echo ""
     log_warn "Signal Caught  : Termination signal received (SIGTERM/SIGINT/SIGHUP)."
     if [ -n "${COLLECTL_PID}" ] && kill -0 "${COLLECTL_PID}" 2>/dev/null; then
-        log_info "Signal Handler : Active collectl process detected (PID: ${COLLECTL_PID})."
-        log_info "Buffer Flush   : Transmitting SIGINT to trigger in-memory buffer flush (-F60) to ${LOG_DIR}..."
-        
+        log_info "Signal Handler : Transmitting SIGINT to trigger in-memory buffer flush (-F60) to ${LOG_DIR}..."
         kill -INT "${COLLECTL_PID}" 2>/dev/null || true
-        
-        log_info "Buffer Flush   : Awaiting collectl log sync and graceful process exit..."
         wait "${COLLECTL_PID}" 2>/dev/null || true
         log_info "Buffer Flush   : Telemetry log buffer flush complete."
-    else
-        log_warn "Signal Handler : No active collectl subprocess found under PID '${COLLECTL_PID}'."
     fi
     log_info "Shutdown Complete: Container exiting cleanly."
     exit 0
@@ -95,9 +80,9 @@ term_handler() {
 trap 'term_handler' SIGTERM SIGINT SIGHUP
 
 # --- Launch Execution ---
-if [ -n "${ARGS}" ]; then
+if [ -n "${ARGS// /}" ]; then
     log_info "Launching collectl daemon in foreground mode with extracted arguments..."
-    # ARGS intentionally unquoted so bash performs word splitting for the arguments
+    # ARGS intentionally unquoted so bash splits it into proper arguments for the binary
     /usr/bin/collectl --nodaemon ${ARGS} &
 else
     log_info "Launching collectl daemon in foreground mode with default arguments..."
@@ -106,9 +91,23 @@ fi
 
 COLLECTL_PID=$!
 
-log_info "Daemon Status  : collectl running in background subshell with PID ${COLLECTL_PID}."
+# --- Process Parameter Verification ---
+# Brief sleep to allow kernel to populate process cmdline
+sleep 1
+
+if kill -0 "${COLLECTL_PID}" 2>/dev/null; then
+    # /proc/PID/cmdline is null-byte separated (\0), we translate it to spaces to print nicely
+    ACTUAL_CMD=$(tr '\0' ' ' < "/proc/${COLLECTL_PID}/cmdline")
+    
+    log_info "Daemon Status  : collectl successfully running in background with PID ${COLLECTL_PID}."
+    log_info "Daemon Process : Confirmed execution with exact arguments seen by the OS:"
+    log_info "                 > ${ACTUAL_CMD}"
+else
+    log_error "Daemon Status  : collectl process (PID ${COLLECTL_PID}) failed to start or died immediately."
+    exit 1
+fi
+
 log_info "Logging Path   : ${LOG_DIR}"
 log_info "Lifecycle      : Listening for CRI-O / kubelet eviction signals..."
 
-# Block script execution while keeping trap handlers reactive
 wait "${COLLECTL_PID}"
