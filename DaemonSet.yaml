@@ -14,53 +14,57 @@ spec:
       labels:
         app: collectl
     spec:
-      # these toleration are to have the daemonset runnable on control plane nodes
-      # Uncomment them if you want control plane nodes to run DS pods
-      #tolerations:
-      #- key: node-role.kubernetes.io/master
-      #  operator: Exists
-      #  effect: NoSchedule
       nodeSelector:
         collectl: "true"
+      serviceAccountName: default
+      hostPID: true
+      hostNetwork: true
+      hostIPC: true
+      terminationGracePeriodSeconds: 60
       containers:
       - name: collectl
         image: quay.io/acancell-redhat/ocp_collectl_cpu:4.3.20-ubi9
         imagePullPolicy: Always
         resources:
-          limits:
-            memory: 400Mi
           requests:
-            cpu: 100m
-            memory: 400Mi
-        volumeMounts:
-        - mountPath: /dev/mem
-          name: mem
-        - mountPath: /sys
-          name: sys
-        - mountPath: /var/log
-          name: logs
-        - mountPath: /etc/collectl.conf 
-          name: conf
-          subPath: collectl.conf
+            cpu: 250m
+            memory: 800Mi
+          limits:
+            memory: 1Gi
         securityContext:
           runAsUser: 0
           privileged: true
+        volumeMounts:
+        - mountPath: /proc
+          name: host-proc
+          readOnly: true
+        - mountPath: /sys
+          name: host-sys
+          readOnly: true
+        - mountPath: /dev/mem
+          name: dev-mem
+        - mountPath: /var/log/collectl
+          name: collectl-logs
+        - mountPath: /etc/collectl.conf
+          subPath: collectl.conf
+          name: collectl-config
       volumes:
-      - name: mem
+      - name: host-proc
         hostPath:
-          path: /dev/mem
-          type: CharDevice
-      - name: sys
+          path: /proc
+          type: Directory
+      - name: host-sys
         hostPath:
           path: /sys
           type: Directory
-      - name: logs
+      - name: dev-mem
         hostPath:
-          path: /var/log
-          type: Directory
-      - name: conf
+          path: /dev/mem
+          type: CharDevice
+      - name: collectl-logs
+        hostPath:
+          path: /var/log/collectl
+          type: DirectoryOrCreate
+      - name: collectl-config
         configMap:
           name: collectl-conf
-      hostPID: true
-      hostNetwork: true
-      hostIPC: true
